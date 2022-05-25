@@ -1,0 +1,585 @@
+import logging
+from aiogram import Bot, Dispatcher, executor, types
+from aiogram.contrib.fsm_storage.memory import MemoryStorage
+from aiogram.dispatcher.filters import Text
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+from aiogram.dispatcher import FSMContext
+from aiogram.dispatcher.filters.state import State, StatesGroup
+from aiogram.utils import executor
+from loader import dp
+import random
+import datetime
+from datetime import timedelta
+from PyPDF2 import PdfFileWriter, PdfFileReader
+import io
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+import json
+import shutil
+import barcode
+from barcode.writer import ImageWriter
+import pyqrcode
+import png
+from pyqrcode import QRCode
+from reportlab.pdfbase.pdfmetrics import stringWidth
+from string import Template
+
+bot = Bot(token="")
+logging.basicConfig(level=logging.INFO)
+dp = Dispatcher(bot, storage=MemoryStorage())
+
+# Let's make a storage for user's data
+personal_data = []
+personal_data_pass = []
+
+
+# Let's create 8 states for New Profile
+class Questions(StatesGroup):
+    Pass_city = State()
+    Pass_date = State()
+    Pass_time = State()
+    Pass_name = State()
+    Passport = State()
+    DOB = State()
+    MF = State()
+    Check = State()
+
+
+# Let's create 8 states for Pass
+class QuestionsPass(StatesGroup):
+    pass_city_state = State()
+    pass_date_state = State()
+    pass_name_eng_state = State()
+    pass_name_ru_state = State()
+    pass_m_f_state = State()
+    pass_passport_state = State()
+    pass_dob_state = State()
+    pass_date_receive = State()
+    pass_check = State()
+
+
+# All menus
+start_menu = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text='New profile')],
+                                          [KeyboardButton(text='Member')]],
+                                 resize_keyboard=True)
+
+
+full_name_eng = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text='STEEVE JOBS')],
+                                          [KeyboardButton(text='MICHAEL KIM')],
+                                          [KeyboardButton(text='LISA MORIS')]],
+                                    resize_keyboard=True)
+
+
+pass_m_f = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text='Male')],
+                                          [KeyboardButton(text='Female')]],
+                               resize_keyboard=True)
+
+
+pass_passport = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text='725053920')],
+                                          [KeyboardButton(text='493488032')],
+                                          [KeyboardButton(text='725021984')]],
+                                    resize_keyboard=True)
+
+
+pass_dob_menu = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text='1973, 01, 30')],
+                                          [KeyboardButton(text='1989, 02, 21')],
+                                          [KeyboardButton(text='1991, 02, 29')]],
+                                    resize_keyboard=True)
+
+
+pass_received_menu = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text='2020, 01, 30')],
+                                          [KeyboardButton(text='2021, 02, 21')],
+                                          [KeyboardButton(text='2022, 02, 29')]],
+                                         resize_keyboard=True)
+
+
+pass_check_menu = ReplyKeyboardMarkup(keyboard=[
+    [KeyboardButton(text='Check')],
+    ])
+
+
+pass_correct_menu = ReplyKeyboardMarkup(keyboard=[
+    [KeyboardButton(text='Yes, correct')],
+    [KeyboardButton(text='No, incorrect')],
+    ])
+
+# Questions menu
+pass_city = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text='PUNE')],
+                                             [KeyboardButton(text='HYDROBATHS')],
+                                             [KeyboardButton(text='AHMEDABAD')],
+                                             [KeyboardButton(text='PANAJI')],
+                                             [KeyboardButton(text='CHENNAI')],
+                                             [KeyboardButton(text='BENGALURU')],
+                                             [KeyboardButton(text='MUMBAI')],
+                                             [KeyboardButton(text='DELHI')],
+                                          ],
+                                resize_keyboard=True)
+
+
+pass_date = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text='Today')],
+                                          [KeyboardButton(text='Tomorrow')],
+                                          [KeyboardButton(text='The day after tomorrow')]],
+                                resize_keyboard=True)
+
+
+pass_time = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text='Morning')],
+                                          [KeyboardButton(text='Afternoon')],
+                                          [KeyboardButton(text='Evening')]],
+                                resize_keyboard=True)
+
+full_name = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text='STEEVE JOBS')],
+                                          [KeyboardButton(text='MICHAEL KIM')],
+                                          [KeyboardButton(text='LISA MORIS')]],
+                                resize_keyboard=True)
+
+passport = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text='725053920')],
+                                          [KeyboardButton(text='493488032')],
+                                          [KeyboardButton(text='725021984')]],
+                               resize_keyboard=True)
+
+dob_menu = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text='1973, 01, 30')],
+                                          [KeyboardButton(text='1989, 02, 21')],
+                                          [KeyboardButton(text='1991, 02, 29')]],
+                               resize_keyboard=True)
+
+m_f = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text='Male')],
+                                          [KeyboardButton(text='Female')]],
+                          resize_keyboard=True)
+
+
+check_menu = ReplyKeyboardMarkup(keyboard=[
+    [KeyboardButton(text='Check')],
+    ])
+
+
+correct_menu = ReplyKeyboardMarkup(keyboard=[
+    [KeyboardButton(text='Correct')],
+    [KeyboardButton(text='Incorrect')],
+    ])
+
+
+back_menu = ReplyKeyboardMarkup(keyboard=[
+    [KeyboardButton(text='Back')],
+    ])
+
+
+# Functions
+def indian_barcode(member_id):
+    c128 = barcode.get_barcode_class('Code128')
+    itf = c128(member_id, writer=ImageWriter())
+    fullname = itf.save('128_barcode',
+                        options={"write_text": False, "module_width": 0.15, "module_height": 2.5, "quiet_zone": 0})
+
+
+def indian_qr(filename):
+    s = "https://passnft.in/members/"+filename
+    url = pyqrcode.create(s)
+    url.png('tempqr.png', scale = 6)
+
+
+def add_text_india(city, name, name_prefix, passport, age, gender, member_id, member_nft_id, date_time_obj):
+    member_date_str = date_time_obj.strftime("%d-%m-%Y %I:%M:%S %p")
+    random_hours = random.randint(1, 3)
+    random_minutes = random.randint(1, 25)
+    random_seconds = random.randint(0, 59)
+    date_time_obj = date_time_obj - timedelta(days=1) - timedelta(minutes=random_minutes) - timedelta(
+        hours=random_hours) - timedelta(seconds=random_seconds)
+    date_time_str = date_time_obj.strftime("%d-%m-%Y %I:%M:%S %p")
+
+    packet = io.BytesIO()
+    can = canvas.Canvas(packet, pagesize=letter)
+
+    pdfmetrics.registerFont(TTFont('Verdana', 'Verdana.ttf'))
+    pdfmetrics.registerFont(TTFont('Calibri', 'Calibri.ttf'))
+    pdfmetrics.registerFont(TTFont('Verdana-Bold', 'Verdana Bold.ttf'))
+
+    # Approved Date
+    can.setFont('Calibri', 10)
+
+    # From what I can tell, using the 256 color space won't work. The manual states that 
+    # using 1 is 'all lights on full'. So, to create 256,256,256 is actually done by using (1,1,1). 
+    # Thus, to get something in between, you'll have to use decimals. For me, I wanted the RGB: (75,116,156) 
+    # so I had to write: setFillColorRGB(0.29296875,0.453125,0.609375). That's the equivelant to: 75/256, 116/256, 156/256. 
+    # A bit ridiculous IMO, but it came out perfect.
+
+    # can.setFillColorRGB(0,0,2)
+    can.drawString(533, 753, city)  # 000080 color
+
+    # Pass ID
+    can.setFont('Verdana', 8.25)
+    can.drawString(106, 682, ":" + member_id )
+    # Member ID
+    can.setFont('Verdana', 8.25)
+    can.drawString(106, 669, ":" + member_nft_id)
+    can.setFont('Verdana', 8.25)
+    can.drawString(106, 657, ":")
+    can.setFont('Verdana', 8.25)
+    can.drawString(106, 645, ":")
+
+    # Age Gender
+    can.setFont('Verdana', 8.25)
+    can.drawString(34, 697, "Age: " + age + " Gender : " + gender)
+
+    # Name passport
+    can.setFont('Verdana-Bold', 8.25)
+    can.drawString(34, 711, name_prefix + name + " " + passport)
+
+    # Pass date
+    can.setFont('Verdana', 8.25)
+    can.drawString(466, 675, ":" + date_time_str)
+    # Reg Date
+    can.setFont('Verdana', 8.25)
+    can.drawString(466, 660, ":" + date_time_str)
+    # Approved Date
+    can.setFont('Verdana', 8.25)
+    can.drawString(466, 645, ":" + date_time_str)
+
+    can.save()
+
+    # move to the beginning of the StringIO buffer
+    packet.seek(0)
+
+    # create a new PDF with Reportlab
+    new_pdf = PdfFileReader(packet)
+    # read your existing PDF
+    existing_pdf = PdfFileReader(open("tpl/india.pdf", "rb"))
+    output = PdfFileWriter()
+    # add the "watermark" (which is the new pdf) on the existing page
+    page = existing_pdf.getPage(0)
+    page.mergePage(new_pdf.getPage(0))
+    output.addPage(page)
+    # finally, write "output" to a real file
+    outputStream = open("destination.pdf", "wb")
+    output.write(outputStream)
+    outputStream.close()
+
+
+def indian_image(filename):
+
+    in_pdf_file = 'destination.pdf'
+    out_pdf_file = filename
+    img_file = 'tempqr.png'
+
+    barcode_file = '128_barcode.png'
+
+    packet = io.BytesIO()
+    can = canvas.Canvas(packet)
+    # can.drawString(10, 100, "Hello world")
+    x_start = 265
+    y_start = -50
+    can.drawImage(img_file, x_start, y_start, width=63, preserveAspectRatio=True, mask='auto')
+    x_start = 470
+    y_start = 683
+    can.drawImage(barcode_file, x_start, y_start, width=70, preserveAspectRatio=True, mask='auto')
+    can.showPage()
+    can.showPage()
+    can.showPage()
+    can.save()
+
+    # x_start = 265
+    # y_start = 100
+    # can.drawImage(barcode_file, x_start, y_start, preserveAspectRatio=True, mask='auto')
+    # can.showPage()
+    # can.showPage()
+    # can.showPage()
+    # can.save()
+
+    # move to the beginning of the StringIO buffer
+    packet.seek(0)
+
+    new_pdf = PdfFileReader(packet)
+
+    # read the existing PDF
+    existing_pdf = PdfFileReader(open(in_pdf_file, "rb"))
+    output = PdfFileWriter()
+
+    for i in range(len(existing_pdf.pages)):
+        page = existing_pdf.getPage(i)
+        page.mergePage(new_pdf.getPage(i))
+        output.addPage(page)
+
+    outputStream = open(out_pdf_file, "wb")
+    output.write(outputStream)
+    outputStream.close()
+
+
+# Let's make message handlers for Pass
+@dp.message_handler(Text(equals=['Member']), state=None)
+async def starter(message: types.Message):
+    await message.answer('Choose the city name:', reply_markup=pass_dob_menu)
+    await QuestionsPass.pass_city_state.set()
+
+
+@dp.message_handler(state=QuestionsPass.pass_city_state)
+async def starter(message: types.Message):
+    await message.answer('Choose the full name in English:', reply_markup=full_name_eng)
+    personal_data_pass.append(message.text.upper())
+    await QuestionsPass.pass_name_eng_state.set()
+
+
+@dp.message_handler(state=QuestionsPass.pass_name_eng_state)
+async def starter(message: types.Message):
+    await message.answer('Choose the gender:', reply_markup=pass_m_f)
+    personal_data_pass.append(message.text.upper())
+    await QuestionsPass.pass_m_f_state.set()
+
+
+@dp.message_handler(state=QuestionsPass.pass_m_f_state)
+async def starter(message: types.Message):
+    await message.answer('Choose the passport number:', reply_markup=pass_passport)
+    personal_data_pass.append(message.text.upper())
+    await QuestionsPass.pass_passport_state.set()
+
+
+@dp.message_handler(state=QuestionsPass.pass_passport_state)
+async def starter(message: types.Message):
+    await message.answer('Choose the date of birthday:', reply_markup=passport)
+    personal_data_pass.append(message.text.upper())
+    await QuestionsPass.pass_dob_state.set()
+
+
+@dp.message_handler(state=QuestionsPass.pass_dob_state)
+async def starter(message: types.Message):
+    await message.answer('Choose the date when you need to receive:', reply_markup=dob_menu)
+    personal_data_pass.append(message.text.upper())
+    await QuestionsPass.pass_date_receive.set()
+
+
+@dp.message_handler(state=QuestionsPass.pass_date_receive)
+async def starter(message: types.Message):
+    await message.answer('Would you like to check the data?', reply_markup=pass_date)
+    personal_data_pass.append(message.text.upper())
+    await QuestionsPass.pass_check.set()
+
+
+@dp.message_handler(state=QuestionsPass.pass_check)
+async def starter(message: types.Message, state: FSMContext):
+    await message.answer(f'Is this correct?\n{personal_data_pass}', reply_markup=check_menu)
+    personal_data_pass.append(message.text.upper())
+    await state.reset_state()
+
+
+@dp.message_handler(Text(equals=['Yes, correct']))
+async def starter(message: types.Message):
+    await message.answer('Congratulations! Here you go.', reply_markup=start_menu)
+    personal_data_pass.clear()
+
+
+@dp.message_handler(Text(equals=['No, incorrect']))
+async def starter(message: types.Message):
+    await message.answer('You can try again', reply_markup=start_menu)
+    personal_data_pass.clear()
+
+
+# Let's make message handlers for New Profile
+@dp.message_handler(Text(equals=['Start', 'Back', 'start', 'back']))
+async def starter(message: types.Message):
+    await message.answer('You returned to the start menu', reply_markup=start_menu)
+
+
+@dp.message_handler(Text(equals=['New profile']), state=None)
+async def starter(message: types.Message):
+    await message.answer('Choose the city name:', reply_markup=pass_city)
+    await Questions.Pass_city.set()
+
+
+@dp.message_handler(state=Questions.Pass_city)
+async def starter(message: types.Message):
+    await message.answer('Choose the date:', reply_markup=pass_date)
+    personal_data.append(message.text.upper())
+    await Questions.Pass_date.set()
+
+
+@dp.message_handler(state=Questions.Pass_date)
+async def starter(message: types.Message):
+    await message.answer("Choose the time:\n(If you type, don't forget to add 'PM' at the end😉).", 
+                         reply_markup=pass_time)
+    test_date_handler = datetime.datetime.now()
+    if message.text == 'Today':
+        # test_date_handler_today = test_date_handler.strftime("%d-%m-%Y")
+        personal_data.append(test_date_handler)
+    elif message.text == 'Tomorrow':
+        test_date_handler = test_date_handler + timedelta(days=1)
+        # test_date_handler_tomorrow = test_date_handler_tomorrow.strftime("%d-%m-%Y")
+        personal_data.append(test_date_handler)
+    elif message.text == 'The day after tomorrow':
+        test_date_handler = test_date_handler + timedelta(days=2)
+        # test_date_handler_the_day_after_tomorrow = test_date_handler_the_day_after_tomorrow.strftime("%d-%m-%Y")
+        personal_data.append(test_date_handler)
+    else:
+        personal_data.append(message.text)
+    await Questions.Pass_time.set()
+
+
+@dp.message_handler(state=Questions.Pass_time)
+async def starter(message: types.Message):
+    await message.answer('Choose the full name:', reply_markup=full_name)
+    test_time_handler = datetime.datetime.now()
+    # random_hours = random.randint(1, 3)
+    # random_minutes = random.randint(1, 25)
+    # random_seconds = random.randint(0, 59)
+    # date_time_obj = date_time_obj - timedelta(days=1) - timedelta(minutes=random_minutes) - timedelta(
+    #     hours=random_hours) - timedelta(seconds=random_seconds)
+    # date_time_str = date_time_obj.strftime("%d-%m-%Y %H:%M:%S")
+    if message.text == 'Morning':
+        random_h = str(random.randint(10, 11))
+        random_m = str(random.randint(11, 59))
+        random_s = str(random.randint(11, 59))
+        test_time_handler_morning = test_time_handler.strftime(f"{random_h}:{random_m}:{random_s} AM")
+        personal_data.append(test_time_handler_morning)
+    elif message.text == 'Afternoon':
+        # random_h = str(random.randint(10, 11))
+        random_m = str(random.randint(11, 59))
+        random_s = str(random.randint(11, 59))
+        test_time_handler_afternoon = test_time_handler.strftime(f"01:{random_m}:{random_s} PM")
+        personal_data.append(test_time_handler_afternoon)
+    elif message.text == 'Evening':
+        # random_h = str(random.randint(10, 11))
+        random_m = str(random.randint(11, 59))
+        random_s = str(random.randint(11, 59))
+        test_time_handler_evening = test_time_handler.strftime(f"04:{random_m}:{random_s} PM")
+        personal_data.append(test_time_handler_evening)
+    else:
+        personal_data.append(message.text)
+    await Questions.Pass_name.set()
+
+
+@dp.message_handler(state=Questions.Pass_name)
+async def starter(message: types.Message):
+    await message.answer('Type the passport number:', reply_markup=passport)
+    personal_data.append(message.text.upper())
+    await Questions.Passport.set()
+
+
+@dp.message_handler(state=Questions.Passport)
+async def starter(message: types.Message):
+    await message.answer('Choose the date of birthday:', reply_markup=dob_menu)
+    personal_data.append(message.text)
+    await Questions.DOB.set()
+
+
+@dp.message_handler(state=Questions.DOB)
+async def starter(message: types.Message):
+    await message.answer('Choose the gender:', reply_markup=m_f)
+    dafsd = (message.text[0:4])
+    personal_data.append(dafsd)
+    await Questions.MF.set()
+
+
+@dp.message_handler(state=Questions.MF)
+async def starter(message: types.Message):
+    await message.answer('Would you like to check the data?', reply_markup=check_menu)
+    personal_data.append(message.text)
+    await Questions.Check.set()
+
+
+@dp.message_handler(state=Questions.Check)
+async def starter(message: types.Message, state: FSMContext):
+    await message.answer(f'Is this correct?\n{personal_data}', reply_markup=correct_menu)
+    personal_data.append(message.text)
+    await state.reset_state()
+    json_file = open("settings.json")
+    variables = json.load(json_file)
+    json_file.close()
+    variables["member_id"] += 1
+    variables["pass_block_id"] += 1
+
+    with open('settings.json', 'w') as f:
+        json.dump(variables, f)
+
+    city = personal_data[0]
+    memberdate = personal_data[1]
+    # membertime = personal_data[2]
+    name = personal_data[3]
+    passport = personal_data[4]
+    x = personal_data[5]
+    y = memberdate.strftime("%Y")
+    age = int(y) - int(x)
+    age = str(age)
+
+    # test_date_handler_tomorrow = test_date_handler_tomorrow.strftime("%d-%m-%Y")
+
+    gender = personal_data[6]
+
+    if gender == "Male":
+        name_prefix = "Mr. "
+    else:
+        name_prefix = "Mrs. "
+
+    member_id = str(variables["member_id"])
+    pass_block_id = str(variables["pass_block_id"])
+    # date_time_str = memberdate + " " + membertime
+    filename = name[0] + str(memberdate.day) + str(memberdate.month) + str(memberdate.year) + ".pdf"
+    indian_barcode(member_id)
+    indian_qr(filename)
+    indian_image(filename)
+    add_text_india(city, name, name_prefix, passport, age, gender, member_id, member_id, memberdate)
+
+
+@dp.message_handler(Text(equals=['Correct']))
+async def starter(message: types.Message):
+    await message.answer('Congratulations! Here you go.', reply_markup=start_menu)
+    json_file = open("settings.json")
+    variables = json.load(json_file)
+    json_file.close()
+    variables["member_id"] += 1
+    variables["pass_block_id"] += 1
+
+    with open('settings.json', 'w') as f:
+        json.dump(variables, f)
+
+    print(personal_data)
+    city = personal_data[0]
+    memberdate = personal_data[1]
+    # membertime = personal_data[2]
+    name = personal_data[3]
+    passport = personal_data[4]
+    x = personal_data[5]
+    y = memberdate.strftime("%Y")
+    age = int(y) - int(x)
+    age = str(age)
+
+    # test_date_handler_tomorrow = test_date_handler_tomorrow.strftime("%d-%m-%Y")
+
+    gender = personal_data[6]
+
+    if gender == "Male":
+        name_prefix = "Mr. "
+    else:
+        name_prefix = "Mrs. "
+
+    member_id = str(variables["member_id"])
+    info_id = str(variables["info_id"])
+    # date_time_str = memberdate + " " + membertime
+    filename = name[0] + str(memberdate.day) + str(memberdate.month) + str(memberdate.year) + ".pdf"
+    print(filename)
+    indian_barcode(member_id)
+    indian_qr(filename)
+    indian_image(filename)
+    add_text_india(city, name, name_prefix, passport, age, gender, member_id, member_id, memberdate)
+
+    chat_id = message.chat.id
+    await bot.send_document(
+                chat_id=chat_id,
+                caption=f"{personal_data}",
+                document=open(filename, 'rb')
+    )
+    personal_data.clear()
+
+
+@dp.message_handler(Text(equals=['Incorrect']))
+async def starter(message: types.Message):
+    await message.answer('You can try again', reply_markup=start_menu)
+    personal_data.clear()
+
+
+@dp.message_handler(Text(equals=['Go back']))
+async def starter(message: types.Message):
+    await message.answer('You returned back', reply_markup=start_menu)
+
+
+if __name__ == '__main__':
+    executor.start_polling(dp, skip_updates=True)
+    
